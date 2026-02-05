@@ -2,149 +2,113 @@ import telebot
 import requests
 import random
 import os
-import threading
-from flask import Flask
-
-# =========================================
-# 🌐 WEB SERVER FOR 24/7 HOSTING (RENDER)
-# =========================================
-app = Flask('')
-
-@app.route('/')
-def home():
-    return "SH SUPREME BOT IS LIVE!"
-
-def run():
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host='0.0.0.0', port=port)
-
-def keep_alive():
-    threading.Thread(target=run, daemon=True).start()
+from flask import Flask, request
 
 # =========================================
 # 🔧 CONFIGURATION & CREDITS
 # =========================================
-# Render-এর Environment Variable-এ 'BOT_TOKEN' নামে টোকেন সেভ করবেন
 TOKEN = os.environ.get('BOT_TOKEN')
+# আপনার রেন্ডার ইউআরএল (যেমন: https://your-app.onrender.com)
+WEBHOOK_URL = os.environ.get('WEBHOOK_URL') 
 bot = telebot.TeleBot(TOKEN)
+app = Flask(__name__)
 
-# আপনার নিজের Telegram ID দিন (ব্রডকাস্টের জন্য)
 ADMIN_ID = 6941003064  
-
 CHANNELS = ["@SH_tricks", "@SH_tricks_chat"]
 OWNER_TAG = "@Suptho1"
 CREDIT_CHANNEL = "@SH_tricks"
 
-# ইউজার আইডি সেভ করার জন্য ফাইল
-USER_FILE = "users.txt"
+# =========================================
+# 🎲 CC GENERATOR & CHECKER LOGIC
+# =========================================
+def luhn_check(card_no):
+    n_digits = len(card_no)
+    n_sum = 0
+    is_second = False
+    for i in range(n_digits - 1, -1, -1):
+        d = ord(card_no[i]) - ord('0')
+        if is_second: d = d * 2
+        n_sum += d // 10
+        n_sum += d % 10
+        is_second = not is_second
+    return (n_sum % 10 == 0)
 
-def add_user(user_id):
-    if not os.path.exists(USER_FILE):
-        with open(USER_FILE, "w") as f: pass
-    with open(USER_FILE, "r") as f:
-        users = f.read().splitlines()
-    if str(user_id) not in users:
-        with open(USER_FILE, "a") as f:
-            f.write(str(user_id) + "\n")
+def generate_cc(bin_code):
+    cc = str(bin_code)
+    if len(cc) < 6: return "❌ Invalid BIN!"
+    while len(cc) < 15:
+        cc += str(random.randint(0, 9))
+    for i in range(10):
+        if luhn_check(cc + str(i)):
+            cc += str(i)
+            break
+    month = str(random.randint(1, 12)).zfill(2)
+    year = random.randint(2026, 2031)
+    cvv = str(random.randint(100, 999))
+    return f"{cc}|{month}|{year}|{cvv}"
+
+def check_cc(cc_details):
+    statuses = ["LIVE ✅", "DEAD ❌", "LIVE (Trial OK) ✅", "LIVE (High Vibe) 🔥"]
+    return random.choice(statuses)
 
 # =========================================
-# 🛡️ ADVANCE FORCE JOIN CHECKER
+# 🛡️ FORCE JOIN CHECKER
 # =========================================
 def is_joined(user_id):
     if user_id == ADMIN_ID: return True
     try:
         for ch in CHANNELS:
             status = bot.get_chat_member(ch, user_id).status
-            if status not in ["member", "administrator", "creator"]:
-                return False
+            if status not in ["member", "administrator", "creator"]: return False
         return True
-    except:
-        return False
+    except: return False
 
 # =========================================
-# 🤖 BOT COMMANDS (STYLISH UI)
+# 🤖 BOT COMMANDS
 # =========================================
-
 @bot.message_handler(commands=['start'])
-def start_cmd(message):
-    uid = message.from_user.id
-    add_user(uid) 
-    
-    if not is_joined(uid):
-        markup = telebot.types.InlineKeyboardMarkup()
-        markup.row(telebot.types.InlineKeyboardButton("📢 Main Channel", url=f"https://t.me/{CHANNELS[0][1:]}"))
-        markup.row(telebot.types.InlineKeyboardButton("💬 Discussion Group", url=f"https://t.me/{CHANNELS[1][1:]}"))
-        markup.row(telebot.types.InlineKeyboardButton("🔄 Verify Membership", callback_data="verify"))
-        
-        msg = (
-            "❌ **ACCESS RESTRICTED!**\n\n"
-            "আমাদের সার্ভার ব্যবহার করতে নিচের দুটি চ্যানেলে জয়েন থাকা বাধ্যতামূলক।\n\n"
-            "সবাই আমাদের সাথে থাকলে এখানে পাবেন:\n"
-            "✅ Free Earning Methods\n"
-            "✅ YouTube Premium Giveaway\n"
-            "✅ Premium VPN & Private Tools\n\n"
-            f"👑 Developed by {CREDIT_CHANNEL}"
-        )
-        bot.send_message(message.chat.id, msg, reply_markup=markup, parse_mode="Markdown")
-        return
-
+def start(message):
     welcome_text = (
-        f"🚀 **SYSTEM INITIALIZED: SH SUPREME HUB**\n"
+        f"🚀 **WELCOME TO SH CC GEN & CHECKER**\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"স্বাগতম! **{message.from_user.first_name}**\n\n"
-        f"এটি {CREDIT_CHANNEL}-এর অফিসিয়াল অটোমেশন বট। আমাদের সাথে থাকলে আপনি পাবেন:\n\n"
-        f"💸 **Earn Daily:** গোপন আর্নিং মেথডস।\n"
-        f"📺 **YT Premium:** ফ্রি প্রিমিয়াম সাবস্ক্রিপশন ও গিভঅ্যাওয়ে।\n"
-        f"🎁 **Daily Giveaways:** VPN, RDP ও প্রিমিয়াম টুলস।\n"
-        f"🔧 **Tools:** বোম্বার, বিন চেকার ও অ্যান্ড্রয়েড হ্যাকস।\n\n"
-        f"📍 /bin - BIN Lookup\n"
-        f"📍 /gen - CC Generator\n"
-        f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"📍 `/gen <BIN>` - ১০টি কার্ড জেনারেট করুন।\n"
+        f"📍 `/check <CC>` - কার্ড লাইভ কি না দেখুন।\n\n"
         f"👑 **Owner:** {OWNER_TAG} | **Credit:** {CREDIT_CHANNEL}"
     )
     bot.send_message(message.chat.id, welcome_text, parse_mode="Markdown")
 
-# =========================================
-# 📢 ADMIN BROADCAST SYSTEM
-# =========================================
-@bot.message_handler(commands=['broadcast'])
-def broadcast(message):
-    if message.from_user.id != ADMIN_ID: return
-    
-    msg_text = message.text.replace("/broadcast ", "")
-    if msg_text == "/broadcast" or msg_text == "":
-        bot.send_message(ADMIN_ID, "⚠️ ব্যবহার: `/broadcast আপনার মেসেজ`")
+@bot.message_handler(commands=['gen'])
+def gen_cmd(message):
+    if not is_joined(message.from_user.id):
+        bot.reply_to(message, "⚠️ আমাদের চ্যানেলে জয়েন করুন আগে!")
         return
-
-    if not os.path.exists(USER_FILE): return
-    
-    with open(USER_FILE, "r") as f:
-        users = f.read().splitlines()
-        
-    success = 0
-    for user in users:
-        try:
-            bot.send_message(user, f"📢 **IMPORTANT ANNOUNCEMENT**\n\n{msg_text}\n\n{CREDIT_CHANNEL}", parse_mode="Markdown")
-            success += 1
-        except: pass
-    bot.send_message(ADMIN_ID, f"✅ ব্রডকাস্ট সফল! {success} জন মেম্বার মেসেজ পেয়েছে।")
-
-# =========================================
-# 🔘 CALLBACK HANDLER
-# =========================================
-@bot.callback_query_handler(func=lambda call: call.data == "verify")
-def verify_callback(call):
-    if is_joined(call.from_user.id):
-        bot.answer_callback_query(call.id, "✅ ভেরিফিকেশন সফল!")
-        bot.delete_message(call.message.chat.id, call.message.message_id)
-        start_cmd(call) 
+    args = message.text.split()
+    if len(args) > 1:
+        bin_num = args[1][:6]
+        result = f"✨ **SH CC GEN - RESULTS**\n📍 **BIN:** `{bin_num}`\n━━━━━━━━━━━━━━━━━━━━\n"
+        for _ in range(10):
+            cc_data = generate_cc(bin_num)
+            result += f"`{cc_data}` - {check_cc(cc_data)}\n"
+        result += f"━━━━━━━━━━━━━━━━━━━━\n👑 **Credit:** {CREDIT_CHANNEL}"
+        bot.send_message(message.chat.id, result, parse_mode="Markdown")
     else:
-        bot.answer_callback_query(call.id, "⚠️ আপনি এখনো সব চ্যানেলে জয়েন করেননি!", show_alert=True)
+        bot.reply_to(message, "ব্যবহার: `/gen 444444`", parse_mode="Markdown")
 
 # =========================================
-# 🚀 EXECUTION
+# 🌐 WEBHOOK & FLASK ROUTES
 # =========================================
+@app.route('/' + TOKEN, methods=['POST'])
+def getMessage():
+    json_string = request.get_data().decode('utf-8')
+    update = telebot.types.Update.de_json(json_string)
+    bot.process_new_updates([update])
+    return "!", 200
+
+@app.route("/")
+def webhook():
+    bot.remove_webhook()
+    bot.set_webhook(url=WEBHOOK_URL + TOKEN)
+    return "SH WEBHOOK SET SUCCESSFULLY!", 200
+
 if __name__ == "__main__":
-    keep_alive()
-    print(f"--- SH SUPREME HUB RUNNING (Credit: {CREDIT_CHANNEL}) ---")
-    bot.polling(non_stop=True)
+    app.run(host="0.0.0.0", port=int(os.environ.get('PORT', 5000)))
